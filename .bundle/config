@@ -1,0 +1,2 @@
+---
+BUNDLE_BUILD__WEBSOCKET___DRIVER: "--with-cppflags=-O2"

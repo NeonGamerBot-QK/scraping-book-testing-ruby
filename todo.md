@@ -1,0 +1,4 @@
+- [ ] make work by sunday
+- [ ] make db func org once free time
+- [ ] org funcs + code
+- [ ] make it work :3
