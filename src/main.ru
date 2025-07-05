@@ -21,19 +21,12 @@ def init_db(db)
         CREATE TABLE IF NOT EXISTS books (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT ,
-            price DECIMAL ,
+            price TEXT,
             category TEXT ,
             in_stock Boolean ,
             product_url URL ,
             image_url URL ,
             description TEXT ,
-            info_upc TEXT ,
-            info_product_type TEXT ,
-            info_avilable TEXT ,
-            info_price_including_tax DECIMAL ,
-            info_price_excluding_tax DECIMAL ,
-            info_tax DECIMAL ,
-            info_review_count INTEGER ,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP         
         );
     SQL
@@ -49,6 +42,15 @@ db = SQLite3::Database.new("databases/latest_data.db")
 browser = Ferrum::Browser.new({ headless: false, timeout: 10, base_url: "https://books.toscrape.com"})
 init_db(db)
 page = browser.create_page
+# page.network.intercept do |request|
+#   url = request.url
+#   if url.end_with?(".css")
+#     request.abort
+#   else
+#     request.continue
+#   end
+# end
+
 
 page_index = 1
 max_page_index = 50
@@ -73,36 +75,15 @@ def scrape_item_page(page, db, link)
 
   # In Stock?
   in_stock_a = page.at_css(".instock.availability") # Correct class name?
-  in_stock = in_stock_a && in_stock_a.text.include?("In stock")
+  in_stock = (in_stock_a && in_stock_a.text.include?("In stock")) ? 1 : 0
   category = page.at_css('[class="breadcrumb"]').css('li')[2]&.text&.strip || "Uncategorized"
   # Helper to extract info from table by label
-def extract_info(page, label)
-  th = page.css("th").find { |el| el.text.include?(label) }
-  return nil unless th
-  page.evaluate(%{
-    (function(th) {
-      const tr = th.parentElement;
-      if (!tr) return null;
-      const td = tr.querySelector("td");
-      return td ? td.textContent.trim() : null;
-    })(arguments[0])
-  }, th)
-end
-
-
-  info_upc = extract_info(page, "UPC")
-  info_product_type = extract_info(page, "Product Type")
-  info_avilable = extract_info(page, "Availability")
-  info_price_including_tax = extract_info(page, "Price (incl. tax)")&.delete("£")&.to_f || 0.0
-  info_price_excluding_tax = extract_info(page, "Price (excl. tax)")&.delete("£")&.to_f || 0.0
-  info_tax = extract_info(page, "Tax")&.delete("£")&.to_f || 0.0
-  info_review_count = extract_info(page, "Number of reviews")&.to_i || 0
-
+  price = page.at_css(".price_color")&.text || "0.00" 
   # Image src
   image_cover = page.at_css("img")&.attribute("src") || ""
 
   # Store to DB
-  db.execute <<~SQL, [title, info_price_excluding_tax, category, in_stock, link, image_cover, rating, description, info_upc, info_product_type, info_avilable, info_price_including_tax, info_price_excluding_tax, info_tax, info_review_count, created_at]
+  db.execute <<~SQL, [title, price, category, in_stock, link, image_cover, description, created_at]
   INSERT INTO books (
     title,
     price,
@@ -111,24 +92,16 @@ end
     product_url,
     image_url,
     description,
-    info_upc,
-    info_product_type,
-    info_avilable,
-    info_price_including_tax,
-    info_price_excluding_tax,
-    info_tax,
-    info_review_count,
     created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 SQL
-
 
   puts "✅ Added item #{title} to database."
 end
 
 sleep 2
 scrape_page(page,big_boy_array,page_index)
-for page_index in 1..2 do
+for page_index in 1..max_page_index do
     puts "Scraping page #{page_index}..."
     page.go_to(get_page_url(page_index))
     sleep 0.5
